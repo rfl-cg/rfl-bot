@@ -34,7 +34,9 @@ export type RunnerClient = ReturnType<typeof createRunnerClient>;
 /** Cliente do runner, usado pelo worker (turnos) e pelo WhatsApp (login dos provedores). */
 export function createRunnerClient({ url, token, fetch = globalThis.fetch }: RunnerClientOptions) {
   const base = url.replace(/\/+$/, "");
-  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const auth = { authorization: `Bearer ${token}` };
+  // Só manda content-type quando há corpo: o Fastify recusa JSON vazio.
+  const jsonHeaders = { ...auth, "content-type": "application/json" };
 
   const call = async <T>(
     path: string,
@@ -45,8 +47,9 @@ export function createRunnerClient({ url, token, fetch = globalThis.fetch }: Run
     try {
       response = await fetch(`${base}${path}`, {
         method: init.method,
-        headers,
-        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        ...(init.body === undefined
+          ? { headers: auth }
+          : { headers: jsonHeaders, body: JSON.stringify(init.body) }),
         signal: AbortSignal.timeout(90_000),
       });
     } catch (error) {
@@ -70,7 +73,7 @@ export function createRunnerClient({ url, token, fetch = globalThis.fetch }: Run
       try {
         response = await fetch(`${base}/turns`, {
           method: "POST",
-          headers,
+          headers: jsonHeaders,
           body: JSON.stringify(request),
           signal,
         });

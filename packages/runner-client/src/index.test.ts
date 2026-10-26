@@ -88,3 +88,34 @@ describe("streamTurn", () => {
     ).rejects.toThrowError(/inválido/);
   });
 });
+
+describe("login", () => {
+  it("POST sem corpo não manda content-type (o Fastify recusaria)", async () => {
+    let seen: RequestInit | undefined;
+    const client = createRunnerClient({
+      url: "http://runner",
+      token: "x",
+      fetch: async (_url, init) => {
+        seen = init;
+        return Response.json({ loginId: "l1", url: "https://claude.ai/oauth/x", needsCode: true });
+      },
+    });
+    await client.startLogin("claude");
+    expect(seen?.headers).toEqual({ authorization: "Bearer x" });
+  });
+
+  it("POST com corpo manda JSON", async () => {
+    let seen: RequestInit | undefined;
+    const client = createRunnerClient({
+      url: "http://runner",
+      token: "x",
+      fetch: async (_url, init) => {
+        seen = init;
+        return Response.json({ signedIn: true, account: null });
+      },
+    });
+    await client.submitLoginCode("claude", "l1", "abc");
+    expect(seen?.headers).toMatchObject({ "content-type": "application/json" });
+    expect(seen?.body).toBe(JSON.stringify({ code: "abc" }));
+  });
+});

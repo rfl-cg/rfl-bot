@@ -2,22 +2,27 @@
 
 Plataforma de bots de IA persistentes, com o OpenBot como direção: cada bot tem nome, personalidade, memória e um "computador" próprio, roda nos CLIs oficiais logados com as suas assinaturas (Claude, Codex, Grok…) e conversa pelo WhatsApp. O plano completo está em [PLANO.md](PLANO.md).
 
-**Status:** Fase 0 (base) pronta. Próxima: Fase 1, o primeiro bot no WhatsApp.
+**Status:** Fase 1 pronta para testar: o primeiro bot no WhatsApp, com o Claude logado pela sua assinatura. Falta só você parear o número e conectar o Claude (veja [Primeiro uso](#primeiro-uso-whatsapp-e-claude)).
 
 ## O que tem aqui
 
 ```text
 apps/
-  api/          Fastify: /health e /ready (depois: REST, SSE, webhooks)
-  worker/       BullMQ: fila do sistema e batimento (depois: turnos dos bots, rotinas)
+  api/          Fastify: /health e /ready (depois: REST, SSE, painel)
+  worker/       fila de turnos por bot, rotinas do sistema, respostas
+  whatsapp/     gateway WhatsApp Web (Baileys): mensagens, comandos do dono, envio
+  runner/       o "computador dos bots": CLIs dos provedores (Claude) e logins
 packages/
-  contracts/    schemas das variáveis de ambiente e tipos compartilhados
+  contracts/    schemas Zod: variáveis de ambiente, eventos, mensagens, provedores
   core/         logger, leitura do .env, criptografia de segredos, desligamento seguro
-  db/           schema Prisma (todas as tabelas do plano) e migrations
+  db/           schema Prisma e migrations
+  runner-client/ cliente HTTP do runner (usado pelo worker e pelo WhatsApp)
+e2e/            teste de ponta a ponta: mensagem entra, resposta sai
 deploy/         Compose de produção, Caddyfile opcional, scripts de deploy e backup
-scripts/        build dos apps
 third_party/    licença e aviso do OpenBot 0.1.11 (Apache-2.0)
 ```
+
+**Como uma mensagem vira resposta:** o `whatsapp` recebe a mensagem e põe na fila do bot → o `worker` pega o turno e manda para o `runner` → o runner roda o CLI do Claude na pasta do bot → a resposta volta pelo worker e sai pelo `whatsapp`. O runner não tem acesso ao banco nem às senhas.
 
 ## Rodar no seu computador
 
@@ -27,23 +32,26 @@ Precisa de **Node.js 24**, **Docker** e do **pnpm** (`corepack enable` instala a
 corepack enable
 pnpm install
 cp .env.example .env
-# Preencha ENCRYPTION_KEY no .env com o resultado de: openssl rand -base64 32
+# No .env, preencha ENCRYPTION_KEY (openssl rand -base64 32), RUNNER_TOKEN
+# (openssl rand -hex 32), WHATSAPP_PHONE e WHATSAPP_OWNER.
 
 pnpm services:up      # sobe Postgres e Redis no Docker
 pnpm db:deploy        # cria as tabelas
-pnpm dev              # sobe api e worker
+pnpm dev              # sobe api, worker, runner e whatsapp
 ```
 
 Teste em http://localhost:3000/ready. Deve mostrar `database`, `redis` e o batimento do `worker`.
+
+No desenvolvimento, `WHATSAPP_CONNECT=false` deixa o gateway sem conectar no WhatsApp, e `RUNNER_ENABLE_ECHO=true` liga o provedor "eco" (responde repetindo a mensagem) para testar sem login. O teste `e2e/` faz o caminho completo sem celular.
 
 ### Comandos
 
 | Comando                         | O que faz                                                  |
 | ------------------------------- | ---------------------------------------------------------- |
-| `pnpm dev`                      | API e worker com recarga automática                        |
+| `pnpm dev`                      | API, worker, runner e WhatsApp com recarga automática      |
 | `pnpm check`                    | Lint + tipos + testes. Rode antes de cada commit           |
 | `pnpm test`                     | Testes (os de banco e fila precisam do `pnpm services:up`) |
-| `pnpm build`                    | Compila api e worker em `dist/`                            |
+| `pnpm build`                    | Compila os apps em `dist/`                                 |
 | `pnpm format`                   | Arruma a formatação                                        |
 | `pnpm db:migrate --name <nome>` | Cria uma migration depois de mudar o `schema.prisma`       |
 | `pnpm db:deploy`                | Aplica as migrations pendentes                             |
@@ -71,7 +79,7 @@ Uma vez só:
    ```sh
    cd /opt/rfl-bot/deploy
    cp .env.example .env
-   nano .env   # POSTGRES_PASSWORD e ENCRYPTION_KEY
+   nano .env   # POSTGRES_PASSWORD, ENCRYPTION_KEY, RUNNER_TOKEN e os números do WhatsApp
    ```
 
    Guarde uma cópia da `ENCRYPTION_KEY` fora da VPS. Sem ela, as chaves salvas no banco não abrem mais.
@@ -131,6 +139,49 @@ docker compose exec -T postgres createdb -U rflbot rflbot
 zcat backups/rflbot-AAAAMMDD-HHMMSS.sql.gz | docker compose exec -T postgres psql -q -v ON_ERROR_STOP=1 -U rflbot -d rflbot
 docker compose start api worker
 ```
+
+## Primeiro uso: WhatsApp e Claude
+
+Depois do `./deploy.sh`, na pasta `deploy/` da VPS:
+
+1. **Parear o WhatsApp** (uma vez só). Veja o código:
+
+   ```sh
+   docker compose logs whatsapp | grep -i parear
+   ```
+
+   O código de 8 letras aparece no campo `pairingCode`. No celular **do número do bot**: _WhatsApp → Dispositivos conectados → Conectar dispositivo → Conectar com número de telefone_, e digite o código. Ele muda a cada minuto; se expirar, rode o comando de novo.
+
+2. **Conectar o Claude:** do **seu** WhatsApp (o `WHATSAPP_OWNER`), mande para o número do bot:
+
+   ```text
+   /login claude
+   ```
+
+   O bot responde com um link. Abra, entre com a conta que tem a assinatura (Pro ou Max), copie o código que a página mostra e mande `/codigo SEU_CÓDIGO`.
+
+3. **Conversar:** mande qualquer mensagem. Quem atende é o bot padrão, o _Assistente_. Para falar com outro bot, comece com `@Nome`.
+
+**Comandos do dono** (só do seu número):
+
+| Comando                          | O que faz                                      |
+| -------------------------------- | ---------------------------------------------- |
+| `/ajuda`                         | Lista os comandos                              |
+| `/bots`                          | Lista os bots                                  |
+| `/novo Nome \| instruções`       | Cria um bot                                    |
+| `/padrao Nome`                   | Bot que atende quem escreve sem @              |
+| `/instrucoes Nome \| texto`      | Muda a personalidade do bot                    |
+| `/modelo Nome modelo`            | Troca o modelo (ex.: `claude-sonnet-5-5`)      |
+| `/login claude` · `/codigo X`    | Conecta a sua assinatura do Claude             |
+| `/provedores` · `/status`        | Mostra o que está conectado e a situação geral |
+| `/fila`                          | O que cada bot está fazendo                    |
+| `/parar [Nome]`                  | Cancela o que o bot está fazendo               |
+| `/pausar Nome` · `/retomar Nome` | Pausa e retoma um bot                          |
+| `/nova [Nome]`                   | Conversa nova: o bot esquece este chat         |
+
+**Cuidados com o WhatsApp Web:** use um chip só para o bot. Só respondem os números em `WHATSAPP_OWNER` e `WHATSAPP_ALLOWED`; o resto é ignorado. Há um limite de mensagens por minuto (`WHATSAPP_MAX_PER_MINUTE`). Se o celular desconectar o aparelho, o gateway mostra um código novo nos logs.
+
+**Logins e arquivos dos bots** ficam no volume `runner-data`; a sessão do WhatsApp, no volume `whatsapp-data`. Apagar um volume = logar ou parear de novo.
 
 ## Licença
 

@@ -7,15 +7,18 @@
 # coloque COMPOSE_PROFILES=caddy no .env.
 name: rfl-bot
 
+x-app-env: &app-env
+  DATABASE_URL: postgresql://rflbot:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/rflbot
+  REDIS_URL: redis://redis:6379
+  RUNNER_URL: http://runner:4000
+  APP_VERSION: ${APP_VERSION:-dev}
+
 x-app: &app
   restart: unless-stopped
   env_file: .env
-  environment:
-    DATABASE_URL: postgresql://rflbot:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/rflbot
-    REDIS_URL: redis://redis:6379
-    APP_VERSION: ${APP_VERSION:-dev}
-  # internal: fala com banco e Redis. public: saída para a internet (APIs de IA, WhatsApp…).
-  networks: [internal, public]
+  environment: *app-env
+  # internal: banco e Redis. runner: o computador dos bots. public: saída para a internet.
+  networks: [internal, runner, public]
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -30,6 +33,7 @@ services:
       target: api
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+    networks: [internal, public]
     ports:
       # Só na própria VPS. Se o proxy roda em Docker, use API_BIND=172.17.0.1 (README).
       - "${API_BIND:-127.0.0.1}:${API_PUBLIC_PORT:-3100}:3000"
@@ -45,10 +49,56 @@ services:
       target: worker
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           memory: 384M
+
+  whatsapp:
+    <<: *app
+    build:
+      context: ..
+      target: whatsapp
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    volumes:
+      # Sessão do WhatsApp Web: apagar este volume = parear de novo.
+      - whatsapp-data:/data/whatsapp
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  # O "computador dos bots": CLIs dos provedores, logins e pastas dos bots.
+  # Sem env_file: não recebe a senha do banco, do Redis nem a ENCRYPTION_KEY.
+  runner:
+    build:
+      context: ..
+      target: runner
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    restart: unless-stopped
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN:?defina RUNNER_TOKEN no .env}
+      RUNNER_MAX_CONCURRENT_TURNS: ${MAX_CONCURRENT_TURNS:-2}
+      RUNNER_ENABLE_ECHO: ${RUNNER_ENABLE_ECHO:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_VERSION: ${APP_VERSION:-dev}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - runner-data:/data
+    networks: [runner, public]
+    deploy:
+      resources:
+        limits:
+          memory: ${RUNNER_MEMORY_LIMIT:-1536M}
 
   migrate:
     build:
@@ -128,6 +178,9 @@ networks:
   # Banco e Redis só nesta rede: sem acesso à internet e sem portas abertas.
   internal:
     internal: true
+  # Worker e WhatsApp falam com o runner por aqui. O banco não está nesta rede.
+  runner:
+    internal: true
   public:
 
 volumes:
@@ -135,3 +188,5 @@ volumes:
   caddy-config:
   postgres-data:
   redis-data:
+  runner-data:
+  whatsapp-data:

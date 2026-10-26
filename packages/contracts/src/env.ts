@@ -100,6 +100,8 @@ export const whatsappEnvSchema = baseEnvSchema.extend(runnerAccessSchema.shape).
   /** Outros números que podem conversar com os bots, separados por vírgula. */
   WHATSAPP_ALLOWED: phoneListSchema,
   WHATSAPP_AUTH_DIR: z.string().min(1).default("/data/whatsapp"),
+  /** false = não conecta no WhatsApp (desenvolvimento e testes sem celular). */
+  WHATSAPP_CONNECT: z.stringbool().default(true),
   /** Limite de mensagens enviadas por minuto (reduz o risco de bloqueio). */
   WHATSAPP_MAX_PER_MINUTE: z.coerce.number().int().min(1).max(120).default(20),
 });

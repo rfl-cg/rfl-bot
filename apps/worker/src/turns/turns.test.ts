@@ -294,6 +294,7 @@ describe.skipIf(!databaseUrl)("turnos", () => {
       const scheduler = new TurnScheduler({
         db,
         logger,
+        workspaceId,
         maxConcurrent: 2,
         pollMs: 60_000,
         execute: async (turnId) => {
@@ -332,6 +333,7 @@ describe.skipIf(!databaseUrl)("turnos", () => {
       const scheduler = new TurnScheduler({
         db,
         logger,
+        workspaceId,
         maxConcurrent: 1,
         pollMs: 60_000,
         execute: async (turnId) => {
@@ -365,6 +367,7 @@ describe.skipIf(!databaseUrl)("turnos", () => {
       const scheduler = new TurnScheduler({
         db,
         logger,
+        workspaceId,
         maxConcurrent: 2,
         pollMs: 60_000,
         execute,
@@ -415,6 +418,7 @@ describe.skipIf(!databaseUrl)("turnos", () => {
       const scheduler = new TurnScheduler({
         db,
         logger,
+        workspaceId,
         maxConcurrent: 1,
         pollMs: 60_000,
         execute: async (_turnId, signal) => {

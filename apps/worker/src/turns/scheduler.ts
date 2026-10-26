@@ -13,6 +13,8 @@ export type TurnSchedulerOptions = {
   pollMs?: number;
   /** Quantas vezes um turno pode ser retomado depois de uma queda. */
   maxAttempts?: number;
+  /** Só turnos deste workspace (testes que dividem o mesmo banco). Vazio = todos. */
+  workspaceId?: string;
 };
 
 /**
@@ -22,7 +24,8 @@ export type TurnSchedulerOptions = {
  * Pensado para um único worker.
  */
 export class TurnScheduler {
-  readonly #options: Required<TurnSchedulerOptions>;
+  readonly #options: Required<Omit<TurnSchedulerOptions, "workspaceId">> &
+    Pick<TurnSchedulerOptions, "workspaceId">;
   readonly #runningBots = new Map<string, Promise<void>>();
   readonly #controllers = new Map<string, AbortController>();
   #timer: NodeJS.Timeout | undefined;
@@ -32,6 +35,11 @@ export class TurnScheduler {
 
   constructor(options: TurnSchedulerOptions) {
     this.#options = { pollMs: 5000, maxAttempts: 2, ...options };
+  }
+
+  /** Filtro de workspace para as consultas de turnos. */
+  get #scope() {
+    return this.#options.workspaceId ? { bot: { workspaceId: this.#options.workspaceId } } : {};
   }
 
   async start(): Promise<void> {
@@ -69,7 +77,7 @@ export class TurnScheduler {
   async #recover(): Promise<void> {
     const { db, logger, maxAttempts } = this.#options;
     const stale = await db.turn.findMany({
-      where: { status: TurnStatus.RUNNING },
+      where: { status: TurnStatus.RUNNING, ...this.#scope },
       select: { id: true, attempts: true },
     });
     for (const turn of stale) {
@@ -108,7 +116,10 @@ export class TurnScheduler {
           where: {
             status: TurnStatus.QUEUED,
             botId: { notIn: this.runningBots },
-            bot: { status: { not: BotStatus.PAUSED } },
+            bot: {
+              status: { not: BotStatus.PAUSED },
+              ...(this.#options.workspaceId ? { workspaceId: this.#options.workspaceId } : {}),
+            },
           },
           distinct: ["botId"],
           orderBy: { queuedAt: "asc" },

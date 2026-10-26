@@ -105,6 +105,17 @@ describe("login do Claude pelo terminal simulado", () => {
     ).rejects.toThrowError(LoginError);
   });
 
+  it("cria a pasta dos logins se ela ainda não existe", async () => {
+    const newHome = join(home, "ainda-nao-existe");
+    const runtime = createClaudeRuntime({
+      executable: FAKE_CLAUDE,
+      env: { ...env, HOME: newHome },
+      home: newHome,
+    });
+    expect(await runtime.status()).toMatchObject({ installed: true, signedIn: false });
+    expect((await runtime.startLogin?.())?.url).toMatch(/^https:\/\/claude\.ai\//);
+  });
+
   it("informa CLI ausente como não instalado", async () => {
     const runtime = createClaudeRuntime({ executable: join(home, "nao-existe"), env, home });
     expect(await runtime.status()).toMatchObject({ installed: false, signedIn: false });

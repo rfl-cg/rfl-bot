@@ -1,0 +1,18 @@
+{
+  "name": "@rfl-bot/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@rfl-bot/contracts": "workspace:*",
+    "@rfl-bot/core": "workspace:*",
+    "@rfl-bot/db": "workspace:*",
+    "@rfl-bot/runner-client": "workspace:*",
+    "bullmq": "catalog:",
+    "ioredis": "catalog:"
+  }
+}

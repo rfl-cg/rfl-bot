@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   type FailureCode,
   messageContentSchema,
+  PROVIDERS,
   type ProviderId,
   providerIdSchema,
   type RuntimeEvent,
@@ -238,7 +239,7 @@ export async function executeTurn(
 
 function ownerFailureText(code: FailureCode, error: string, provider: ProviderId): string {
   if (code === "not_signed_in") {
-    return `⚠️ O *${provider}* não está conectado. Mande */login ${provider}* para conectar a sua assinatura.`;
+    return `⚠️ O *${PROVIDERS[provider].displayName}* não está conectado. Mande */login ${provider}* para conectar a sua assinatura.`;
   }
   return `⚠️ Não consegui responder: ${error}`;
 }

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import {
@@ -51,8 +52,17 @@ export function createClaudeRuntime({
     login = undefined;
   };
 
-  const run = (args: string[]) =>
-    execFileAsync(executable, args, { env, cwd: home, timeout: 10_000, maxBuffer: 256 * 1024 });
+  // A pasta dos logins precisa existir antes de rodar o CLI nela.
+  const ensureHome = () => mkdir(home, { recursive: true });
+  const run = async (args: string[]) => {
+    await ensureHome();
+    return execFileAsync(executable, args, {
+      env,
+      cwd: home,
+      timeout: 10_000,
+      maxBuffer: 256 * 1024,
+    });
+  };
 
   const status = async (): Promise<ProviderStatus> => {
     const base = { id: "claude" as const, displayName: PROVIDERS.claude.displayName };
@@ -89,6 +99,7 @@ export function createClaudeRuntime({
 
     async startLogin() {
       clearLogin();
+      await ensureHome();
       const session = await PtyLoginSession.start({
         command: executable,
         args: ["auth", "login", "--claudeai"],

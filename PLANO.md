@@ -2,7 +2,7 @@
 
 Plataforma de **bots de IA persistentes**, no estilo do Grok Bot, OpenBot e OpenMausBot: cada bot tem nome, personalidade, memória, um "computador" próprio e apps conectados. Você conversa com eles pelo **WhatsApp** (e depois pela web), e eles também conversam entre si.
 
-> **Status:** Fase 0 concluída. Decisões tomadas em 26/10/2026 (seção 14). Próxima: Fase 1.
+> **Status:** Fases 0 e 1 implementadas (26/10/2026). A Fase 1 espera o primeiro uso real: parear o número do bot e fazer `/login claude`. Decisões na seção 14.
 > **Direção:** o **OpenBot** é a referência de produto e de arquitetura em todas as fases (seção 2).
 > **Onde roda:** a mesma VPS Hostinger dos outros apps. **Stack:** Node.js 24 + TypeScript.
 
@@ -311,15 +311,17 @@ rfl-bot/
 ├── apps/
 │   ├── api/              # Fastify: REST, SSE, webhooks                       ✅ base
 │   ├── worker/           # harness: fila dos bots, rotinas, memória           ✅ base
-│   ├── whatsapp/         # gateway WhatsApp Web (Baileys)                     Fase 1
-│   ├── runner/           # "computador": CLIs dos provedores e pastas dos bots Fase 1
+│   ├── whatsapp/         # gateway WhatsApp Web (Baileys)                     ✅ Fase 1
+│   ├── runner/           # "computador": CLIs, logins e pastas dos bots        ✅ Fase 1
+│   │   └── src/drivers/  # claude/ (portado do OpenBot 0.1.11), eco; depois codex/ acp/
 │   └── web/              # painel em Next.js                                  Fase 4
 ├── packages/
 │   ├── contracts/        # schemas Zod e tipos compartilhados                 ✅
 │   ├── core/             # logger, .env, criptografia, desligamento seguro    ✅
 │   ├── db/               # schema Prisma + migrations                         ✅
-│   ├── drivers/          # claude/ codex/ acp/ openai-compat/                 Fase 1-2
-│   └── tools/            # servidor MCP interno (ferramentas do OpenBot)      Fase 1-2
+│   ├── runner-client/    # cliente HTTP do runner                             ✅ Fase 1
+│   └── tools/            # servidor MCP interno (ferramentas do OpenBot)      Fase 2
+├── e2e/                  # teste de ponta a ponta (mensagem entra, resposta sai) ✅
 ├── deploy/               # Compose de produção, scripts de deploy e backup    ✅
 ├── third_party/openbot-0.1.11/  # licença Apache-2.0 do código portado        ✅
 ├── NOTICE · README.md · CLAUDE.md · PLANO.md
@@ -332,7 +334,7 @@ rfl-bot/
 | Fase | Entrega | O que você precisa providenciar |
 |---|---|---|
 | **0. Base** ✅ | Monorepo, banco com todas as tabelas, API e worker com health check, Docker, CI, backup | — |
-| **1. Primeiro bot no WhatsApp** | **Runner** com o Claude logado pela sua assinatura (driver portado do OpenBot 0.1.11), **fila por bot**, **gateway WhatsApp Web**, histórico. Comandos do dono pelo WhatsApp: `/login claude`, `/codigo`, `/bots`, `/novo`, `/fila`, `/parar`. Pareamento pelo terminal da VPS | **Um número de WhatsApp só para o bot** (chip) e **assinatura Claude Pro ou Max** |
+| **1. Primeiro bot no WhatsApp** ✅ | **Runner** com o Claude logado pela sua assinatura (driver portado do OpenBot 0.1.11), **fila por bot**, **gateway WhatsApp Web**, histórico. Comandos do dono pelo WhatsApp: `/login claude`, `/codigo`, `/bots`, `/novo`, `/fila`, `/parar`. Pareamento pelo terminal da VPS | **Um número de WhatsApp só para o bot** (chip) e **assinatura Claude Pro ou Max** |
 | **2. Mais cérebros e time de bots** | Codex, Grok, Cursor, Cline, OpenCode e Ollama (e Gemini, se der). Troca de modelo mantendo a conversa. Memória, rotinas, bot ↔ bot, aprovações no WhatsApp, ferramentas do OpenBot (seção 7) | As assinaturas que quiser usar |
 | **3. Computador de cada bot** | Container por bot, navegador, apps via MCP/Composio, skills | VPS com mais memória, se for usar muitos bots |
 | **4. Produto** | Painel web (Next.js), vários usuários, cobrança (Stripe, Mercado Pago ou Asaas com Pix), Telegram, **WhatsApp Cloud API** e **chaves de API** (exigências para vender) | Conta no meio de pagamento; app na Meta |

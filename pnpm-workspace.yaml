@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - e2e
 
 # Versões únicas para o monorepo inteiro. Nos package.json, use "catalog:".
 catalog:
@@ -9,6 +10,7 @@ catalog:
   "@modelcontextprotocol/sdk": 1.32.2
   "@prisma/adapter-pg": 7.10.1
   "@prisma/client": 7.10.1
+  baileys: 7.0.0-rc14
   bullmq: 6.5.0
   fastify: 5.12.7
   ioredis: 6.0.0
@@ -31,12 +33,25 @@ peerDependencyRules:
     - "@types/react"
     - react
     - react-dom
+    # Do Baileys: só para miniaturas de imagem. Mensagens de texto não precisam.
+    - sharp
+
+# Só os binários desta máquina (as imagens Docker usam Debian, com glibc).
+# Evita baixar o CLI do Claude duas vezes (glibc e musl, ~280 MB cada).
+supportedArchitectures:
+  os: [current]
+  cpu: [current]
+  libc: [glibc]
 
 onlyBuiltDependencies:
   - "@prisma/engines"
   - esbuild
   - prisma
 
-# Acelerador nativo opcional do BullMQ; sem ele, usa a versão em JavaScript.
 ignoredBuiltDependencies:
+  # Só confere a versão do Node (já garantida pelo .nvmrc e pela imagem Docker).
+  - baileys
+  # Acelerador nativo opcional do BullMQ; sem ele, usa a versão em JavaScript.
   - msgpackr-extract
+  # Só mostra um aviso sobre a ferramenta de linha de comando dele.
+  - protobufjs

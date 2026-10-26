@@ -19,10 +19,17 @@ Plataforma de bots de IA persistentes (estilo Grok Bot / OpenBot). O plano compl
 ```sh
 pnpm services:up      # Postgres + Redis no Docker
 pnpm db:deploy        # aplica as migrations
-pnpm dev              # api + worker com recarga automática
+pnpm dev              # api, worker, runner e whatsapp com recarga automática
 pnpm check            # lint + tipos + testes (rode antes de cada commit)
 pnpm build            # compila api e worker
 pnpm db:check         # confere se falta migration para o schema atual
 ```
 
 Os testes de banco e de fila usam o Postgres e o Redis locais (`pnpm services:up`); sem eles, esses testes são pulados.
+
+## Mapa rápido
+
+- `apps/whatsapp`: recebe mensagens (Baileys), comandos do dono (`src/commands.ts`), põe na fila (`src/queueing.ts`), envia (`src/outbound.ts`).
+- `apps/worker/src/turns`: agendador FIFO por bot (`scheduler.ts`) e execução do turno (`execute-turn.ts`).
+- `apps/runner`: drivers dos provedores (`src/drivers/`), login sem tela (`src/login/pty-login.ts`), servidor interno (`src/server.ts`).
+- Em desenvolvimento, use `WHATSAPP_CONNECT=false` (não conecta no WhatsApp; nunca use números inventados conectado) e `RUNNER_ENABLE_ECHO=true`.
