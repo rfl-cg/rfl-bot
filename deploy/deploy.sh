@@ -8,6 +8,7 @@ export APP_VERSION="$(git rev-parse --short HEAD)"
 
 cd deploy
 docker compose up -d --build --remove-orphans
-docker image prune -f
+# Só limpa imagens antigas do RFL Bot: a VPS tem outros apps.
+docker image prune -f --filter "label=com.docker.compose.project=rfl-bot"
 
 echo "deploy ok: $APP_VERSION"
