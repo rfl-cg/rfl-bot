@@ -24,6 +24,7 @@
   "devDependencies": {
     "@rfl-bot/contracts": "workspace:*",
     "@rfl-bot/core": "workspace:*",
-    "@rfl-bot/db": "workspace:*"
+    "@rfl-bot/db": "workspace:*",
+    "@rfl-bot/runner-client": "workspace:*"
   }
 }

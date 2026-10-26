@@ -167,6 +167,9 @@ importers:
       '@rfl-bot/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@rfl-bot/runner-client':
+        specifier: workspace:*
+        version: link:../../packages/runner-client
 
   packages/contracts:
     dependencies:
@@ -195,6 +198,15 @@ importers:
       prisma:
         specifier: 'catalog:'
         version: 7.10.1
+
+  packages/runner-client:
+    dependencies:
+      '@rfl-bot/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
 packages:
 
