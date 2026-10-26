@@ -1,6 +1,10 @@
-# Produção na VPS. Na pasta deploy/:
+# Produção na VPS (compartilhada com outros apps). Na pasta deploy/:
 #   cp .env.example .env   (e preencha)
-#   docker compose up -d --build
+#   ./deploy.sh
+#
+# A API fica só em 127.0.0.1:3100. O proxy que já existe na VPS (Nginx, Caddy…)
+# encaminha o domínio para ela. Para usar o Caddy incluso (VPS só do bot),
+# coloque COMPOSE_PROFILES=caddy no .env.
 name: rfl-bot
 
 x-app: &app
@@ -19,24 +23,6 @@ x-app: &app
       condition: service_healthy
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN no .env}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    networks: [internal, public]
-    depends_on:
-      api:
-        condition: service_healthy
-
   api:
     <<: *app
     build:
@@ -44,6 +30,13 @@ services:
       target: api
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+    ports:
+      # Só na própria VPS. Se o proxy roda em Docker, use API_BIND=172.17.0.1 (README).
+      - "${API_BIND:-127.0.0.1}:${API_PUBLIC_PORT:-3100}:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
 
   worker:
     <<: *app
@@ -52,6 +45,10 @@ services:
       target: worker
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+    deploy:
+      resources:
+        limits:
+          memory: 384M
 
   migrate:
     build:
@@ -80,6 +77,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 768M
 
   redis:
     image: redis:7-alpine
@@ -94,9 +95,37 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Opcional: só quando a VPS não tem outro proxy nas portas 80/443.
+  caddy:
+    profiles: [caddy]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [internal, public]
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
 networks:
-  # Banco e Redis só nesta rede: sem portas abertas para a internet.
+  # Banco e Redis só nesta rede: sem acesso à internet e sem portas abertas.
   internal:
     internal: true
   public:
