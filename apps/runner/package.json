@@ -1,0 +1,28 @@
+{
+  "name": "@rfl-bot/runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts | pino-pretty",
+    "build": "node ../../scripts/build-app.mjs",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/index.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
+    "fastify": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@rfl-bot/contracts": "workspace:*",
+    "@rfl-bot/core": "workspace:*"
+  }
+}

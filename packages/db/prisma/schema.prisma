@@ -132,6 +132,8 @@ model Bot {
   model        String
   /// low | medium | high | xhigh | max
   effort       String?
+  /// login (assinatura no CLI, como no OpenBot) | api-key (para a venda)
+  authMode     String    @default("login")
   /// Ferramentas liberadas, limites de gasto etc.
   settings     Json      @default("{}")
   status       BotStatus @default(IDLE)
@@ -186,7 +188,7 @@ model Message {
   /// Quem escreveu: uma pessoa (userId) ou outro bot (authorBotId).
   authorUserId   String?
   authorBotId    String?
-  /// Turno que produziu esta mensagem (respostas do bot).
+  /// Turno desta mensagem: o que ela disparou (pessoa) ou o que a produziu (bot).
   turnId         String?
   createdAt      DateTime    @default(now())
 
@@ -195,6 +197,7 @@ model Message {
   turn         Turn?        @relation(fields: [turnId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, createdAt])
+  @@index([turnId])
 }
 
 // Uma "rodada" de trabalho do bot. Também é o item da fila FIFO de cada bot.
@@ -211,6 +214,8 @@ model Turn {
   outputTokens   Int        @default(0)
   costUsd        Decimal    @default(0) @db.Decimal(12, 6)
   error          String?
+  /// Quantas vezes o turno foi retomado depois de uma queda do worker.
+  attempts       Int        @default(0)
   queuedAt       DateTime   @default(now())
   startedAt      DateTime?
   endedAt        DateTime?
