@@ -1,0 +1,414 @@
+// Schema do RFL Bot. Veja a seção 5 do PLANO.md.
+// Depois de mudar este arquivo: `pnpm db:migrate` (cria a migration e gera o client).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum BotStatus {
+  IDLE
+  WORKING
+  PAUSED
+}
+
+enum Channel {
+  WEB
+  WHATSAPP
+  TELEGRAM
+  BOT
+}
+
+enum MessageRole {
+  USER
+  BOT
+  SYSTEM
+  TOOL
+}
+
+enum TurnStatus {
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  DONE
+  FAILED
+  CANCELED
+}
+
+enum MemoryKind {
+  FACT
+  PREFERENCE
+  NOTE
+}
+
+enum MailboxStatus {
+  PENDING
+  DELIVERED
+  ANSWERED
+  FAILED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+}
+
+enum IntegrationType {
+  MCP
+  COMPOSIO
+}
+
+// ─── Pessoas e contas ───────────────────────────────────────────────────────
+
+// Campos compatíveis com o Better Auth (login entra na Fase 1).
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  memberships Member[]
+}
+
+// "Empresa" ou conta. Tudo pertence a um workspace (prepara para vários clientes).
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members         Member[]
+  bots            Bot[]
+  secrets         Secret[]
+  channelBindings ChannelBinding[]
+  integrations    Integration[]
+  skills          Skill[]
+}
+
+model Member {
+  id          String     @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        MemberRole @default(MEMBER)
+  createdAt   DateTime   @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+// ─── Bots ───────────────────────────────────────────────────────────────────
+
+model Bot {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  name         String
+  avatarUrl    String?
+  /// Personalidade e regras do bot.
+  instructions String    @default("")
+  /// Driver: claude | codex | openai-compat | acp
+  provider     String
+  /// Ex.: claude-opus-5-5
+  model        String
+  /// low | medium | high | xhigh | max
+  effort       String?
+  /// Ferramentas liberadas, limites de gasto etc.
+  settings     Json      @default("{}")
+  status       BotStatus @default(IDLE)
+  /// Container do "computador" do bot (Fase 3).
+  sandboxId    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations    Conversation[]
+  turns            Turn[]
+  providerSessions ProviderSession[]
+  memories         Memory[]
+  routines         Routine[]
+  mailboxSent      Mailbox[]         @relation("MailboxFrom")
+  mailboxReceived  Mailbox[]         @relation("MailboxTo")
+  channelBindings  ChannelBinding[]
+  integrations     Integration[]
+  messages         Message[]
+
+  @@unique([workspaceId, name])
+}
+
+// ─── Conversas e trabalho ───────────────────────────────────────────────────
+
+model Conversation {
+  id             String    @id @default(cuid())
+  botId          String
+  channel        Channel
+  /// Número do WhatsApp, chat do Telegram. Vazio nas conversas da web.
+  externalChatId String?
+  title          String?
+  lastMessageAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  bot              Bot               @relation(fields: [botId], references: [id], onDelete: Cascade)
+  messages         Message[]
+  turns            Turn[]
+  providerSessions ProviderSession[]
+
+  @@unique([botId, channel, externalChatId])
+  @@index([botId, updatedAt])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  /// Texto e anexos.
+  content        Json
+  /// Quem escreveu: uma pessoa (userId) ou outro bot (authorBotId).
+  authorUserId   String?
+  authorBotId    String?
+  /// Turno que produziu esta mensagem (respostas do bot).
+  turnId         String?
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  authorBot    Bot?         @relation(fields: [authorBotId], references: [id], onDelete: SetNull)
+  turn         Turn?        @relation(fields: [turnId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+// Uma "rodada" de trabalho do bot. Também é o item da fila FIFO de cada bot.
+model Turn {
+  id             String     @id @default(cuid())
+  botId          String
+  conversationId String
+  /// Rotina que criou este turno, se houver.
+  routineId      String?
+  status         TurnStatus @default(QUEUED)
+  provider       String
+  model          String
+  inputTokens    Int        @default(0)
+  outputTokens   Int        @default(0)
+  costUsd        Decimal    @default(0) @db.Decimal(12, 6)
+  error          String?
+  queuedAt       DateTime   @default(now())
+  startedAt      DateTime?
+  endedAt        DateTime?
+
+  bot          Bot          @relation(fields: [botId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  routine      Routine?     @relation(fields: [routineId], references: [id], onDelete: SetNull)
+  events       Event[]
+  approvals    Approval[]
+  messages     Message[]
+  mailbox      Mailbox[]
+
+  // Fila: próximo turno de um bot = menor queuedAt com status QUEUED.
+  @@index([botId, status, queuedAt])
+  @@index([conversationId, queuedAt])
+}
+
+// Registro que nunca se apaga: tudo o que aconteceu em cada turno, em ordem.
+model Event {
+  id        BigInt   @id @default(autoincrement())
+  turnId    String
+  seq       Int
+  /// text.delta, tool.started, usage…
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  turn Turn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@unique([turnId, seq])
+}
+
+// Sessão nativa do provedor, para retomar a conversa sem reenviar o histórico.
+model ProviderSession {
+  id              String   @id @default(cuid())
+  botId           String
+  conversationId  String
+  provider        String
+  nativeSessionId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bot          Bot          @relation(fields: [botId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, conversationId, provider])
+}
+
+// ─── Memória, rotinas e time de bots ────────────────────────────────────────
+
+model Memory {
+  id        String     @id @default(cuid())
+  botId     String
+  kind      MemoryKind @default(FACT)
+  content   String
+  /// De onde veio (conversa, rotina, extração automática).
+  source    String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@index([botId, createdAt])
+}
+
+model Routine {
+  id           String    @id @default(cuid())
+  botId        String
+  name         String
+  /// Expressão cron. Vazia quando a rotina só roda por webhook.
+  cron         String?
+  timezone     String    @default("America/Sao_Paulo")
+  prompt       String
+  /// Token secreto da URL /hooks/:token.
+  webhookToken String?   @unique
+  enabled      Boolean   @default(true)
+  lastRunAt    DateTime?
+  nextRunAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+  turns Turn[]
+
+  @@index([botId])
+}
+
+// Mensagens entre bots (ideia do mailbox do OpenBot).
+model Mailbox {
+  id        String        @id @default(cuid())
+  fromBotId String
+  toBotId   String
+  body      String
+  status    MailboxStatus @default(PENDING)
+  /// Turno do bot que recebeu a mensagem.
+  turnId    String?
+  replyToId String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  fromBot Bot       @relation("MailboxFrom", fields: [fromBotId], references: [id], onDelete: Cascade)
+  toBot   Bot       @relation("MailboxTo", fields: [toBotId], references: [id], onDelete: Cascade)
+  turn    Turn?     @relation(fields: [turnId], references: [id], onDelete: SetNull)
+  replyTo Mailbox?  @relation("MailboxReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies Mailbox[] @relation("MailboxReplies")
+
+  @@index([toBotId, status])
+}
+
+// Pedido de "ok" antes de uma ação sensível.
+model Approval {
+  id              String         @id @default(cuid())
+  turnId          String
+  tool            String
+  args            Json
+  /// Texto curto mostrado nos botões Aprovar / Negar.
+  summary         String
+  status          ApprovalStatus @default(PENDING)
+  decidedByUserId String?
+  decidedAt       DateTime?
+  createdAt       DateTime       @default(now())
+
+  turn Turn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@index([turnId])
+  @@index([status, createdAt])
+}
+
+// ─── Canais, integrações e segredos ─────────────────────────────────────────
+
+// Liga um número de WhatsApp ou bot do Telegram ao bot que atende ali.
+model ChannelBinding {
+  id          String   @id @default(cuid())
+  workspaceId String
+  channel     Channel
+  externalId  String
+  botId       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bot       Bot       @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([channel, externalId])
+  @@index([workspaceId])
+}
+
+// App conectado (servidor MCP ou conta Composio). Sem botId = vale para o workspace todo.
+model Integration {
+  id          String          @id @default(cuid())
+  workspaceId String
+  botId       String?
+  type        IntegrationType
+  name        String
+  config      Json            @default("{}")
+  secretId    String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bot       Bot?      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  secret    Secret?   @relation(fields: [secretId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
+// Chave de API ou token, criptografado com AES-256-GCM (packages/core/src/crypto.ts).
+model Secret {
+  id          String   @id @default(cuid())
+  workspaceId String
+  /// Nome único no workspace. Ex.: anthropic, openai, xai.
+  name        String
+  /// Tipo do segredo. Ex.: api_key, oauth_token.
+  kind        String
+  ciphertext  Bytes
+  /// Últimos 4 caracteres, para mostrar na tela sem abrir o segredo.
+  last4       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  integrations Integration[]
+
+  @@unique([workspaceId, name])
+}
+
+// Passo a passo reutilizável (pasta com SKILL.md). Cada revisão é uma nova versão.
+model Skill {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  version     Int      @default(1)
+  description String?
+  /// Arquivos da skill: { "SKILL.md": "...", "scripts/x.py": "..." }
+  files       Json
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name, version])
+}

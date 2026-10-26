@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/*.log
+.git
+.github
+.env
+.env.*
+deploy/.env
+deploy/backups
+packages/db/src/generated

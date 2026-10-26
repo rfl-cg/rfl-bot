@@ -1,0 +1,39 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Versões únicas para o monorepo inteiro. Nos package.json, use "catalog:".
+catalog:
+  "@prisma/adapter-pg": 7.10.1
+  "@prisma/client": 7.10.1
+  bullmq: 6.5.0
+  fastify: 5.12.7
+  ioredis: 6.0.0
+  pino: 10.4.0
+  prisma: 7.10.1
+  vite: 8.3.5
+  vitest: 5.0.5
+  zod: 4.6.7
+
+# Não puxar o CLI do Prisma nem o TypeScript (peers opcionais do @prisma/client)
+# para dentro das imagens de produção da api e do worker.
+autoInstallPeers: false
+dedupePeerDependents: false
+resolvePeersFromWorkspaceRoot: false
+
+peerDependencyRules:
+  # Pedidos pelo Prisma Studio, que já vem com a interface pronta e funciona sem eles.
+  ignoreMissing:
+    - "@types/node"
+    - "@types/react"
+    - react
+    - react-dom
+
+onlyBuiltDependencies:
+  - "@prisma/engines"
+  - esbuild
+  - prisma
+
+# Acelerador nativo opcional do BullMQ; sem ele, usa a versão em JavaScript.
+ignoredBuiltDependencies:
+  - msgpackr-extract

@@ -1,0 +1,29 @@
+{
+  "name": "@rfl-bot/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts | pino-pretty",
+    "build": "node ../../scripts/build-app.mjs",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/index.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/client": "catalog:",
+    "bullmq": "catalog:",
+    "ioredis": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@rfl-bot/contracts": "workspace:*",
+    "@rfl-bot/core": "workspace:*",
+    "@rfl-bot/db": "workspace:*"
+  }
+}

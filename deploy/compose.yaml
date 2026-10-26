@@ -1,0 +1,108 @@
+# Produção na VPS. Na pasta deploy/:
+#   cp .env.example .env   (e preencha)
+#   docker compose up -d --build
+name: rfl-bot
+
+x-app: &app
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://rflbot:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/rflbot
+    REDIS_URL: redis://redis:6379
+    APP_VERSION: ${APP_VERSION:-dev}
+  # internal: fala com banco e Redis. public: saída para a internet (APIs de IA, WhatsApp…).
+  networks: [internal, public]
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN no .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [internal, public]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    build:
+      context: ..
+      target: api
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+
+  worker:
+    <<: *app
+    build:
+      context: ..
+      target: worker
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+
+  migrate:
+    build:
+      context: ..
+      target: migrate
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://rflbot:${POSTGRES_PASSWORD}@postgres:5432/rflbot
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rflbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: rflbot
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rflbot -d rflbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ exige noeviction: o Redis nunca pode apagar jobs para liberar memória.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+networks:
+  # Banco e Redis só nesta rede: sem portas abertas para a internet.
+  internal:
+    internal: true
+  public:
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  redis-data:
