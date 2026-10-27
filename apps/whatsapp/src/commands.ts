@@ -119,7 +119,7 @@ async function listBots(ctx: CommandContext): Promise<string> {
     const state = { IDLE: "livre", WORKING: "trabalhando", PAUSED: "pausado" }[bot.status];
     const queued = bot._count.turns > 0 ? ` · ${bot._count.turns} na fila` : "";
     const isDefault = bot.id === defaultId ? " ⭐" : "";
-    return `- *${bot.name}*${isDefault} — ${bot.provider} (${bot.model}) · ${state}${queued}`;
+    return `- *${bot.name}*${isDefault} — ${providerName(bot.provider)} · ${bot.model} · ${state}${queued}`;
   });
   return `*Bots*\n${lines.join("\n")}\n\n⭐ = atende quem escreve sem @`;
 }
@@ -185,6 +185,13 @@ async function setModel(ctx: CommandContext, args: string): Promise<string> {
   return `✅ *${bot.name}* agora usa ${model}.`;
 }
 
+/** Nome do provedor para mostrar (ex.: "claude" → "Claude"). */
+function providerName(id: string): string {
+  return (PROVIDER_IDS as readonly string[]).includes(id)
+    ? PROVIDERS[id as ProviderId].displayName
+    : id;
+}
+
 function parseProvider(raw: string): ProviderId | null {
   const value = raw.toLowerCase() === "eco" ? "echo" : raw.toLowerCase();
   return (PROVIDER_IDS as readonly string[]).includes(value) ? (value as ProviderId) : null;
@@ -198,7 +205,7 @@ async function setProvider(ctx: CommandContext, args: string): Promise<string> {
   if (!bot) return notFound(name);
   const model = PROVIDERS[provider].defaultModel;
   await ctx.db.bot.update({ where: { id: bot.id }, data: { provider, model } });
-  return `✅ *${bot.name}* agora usa ${PROVIDERS[provider].displayName} (${model}). A conversa continua; só o cérebro mudou.`;
+  return `✅ *${bot.name}* agora usa ${PROVIDERS[provider].displayName} · modelo ${model}. A conversa continua; só o cérebro mudou.`;
 }
 
 function publicProviders(): ProviderId[] {

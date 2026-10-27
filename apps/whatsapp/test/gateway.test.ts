@@ -283,7 +283,7 @@ describe.skipIf(!databaseUrl)("gateway do WhatsApp", () => {
 
       await send(OWNER, "/bots");
       expect(lastReply()).toMatch(/\*Assistente\* ⭐/);
-      expect(lastReply()).toMatch(/\*Vendas\* — claude \(claude-opus-5-5\)/);
+      expect(lastReply()).toMatch(/\*Vendas\* — Claude · claude-opus-5-5 · livre/);
 
       await send(OWNER, "/padrao vendas");
       expect(lastReply()).toMatch(/Vendas\* agora atende/);
